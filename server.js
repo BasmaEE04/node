@@ -8,6 +8,9 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// Temporary in-memory store for OTPs (use a more persistent store in production)
+let otpStore = {};
+
 // Generate a 6-digit OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000);
 
@@ -33,10 +36,11 @@ const sendOTP = async (email) => {
     await transporter.sendMail(mailOptions);
     console.log(`OTP sent to ${email}: ${otp}`);
 
-    return otp; // Return OTP for verification
+    // Store the OTP for this email (in-memory storage for demo purposes)
+    otpStore[email] = otp;
 };
 
-// API Route to Request OTP
+// API Route to Request OTP (Send OTP)
 app.post("/send-otp", async (req, res) => {
     const { email } = req.body;
 
@@ -45,10 +49,30 @@ app.post("/send-otp", async (req, res) => {
     }
 
     try {
-        const otp = await sendOTP(email);
-        res.json({ message: "OTP sent successfully", otp }); // Send OTP (remove in production)
+        await sendOTP(email);
+        res.json({ message: "OTP sent successfully" });
     } catch (error) {
         res.status(500).json({ error: "Error sending OTP" });
+    }
+});
+
+// API Route to Verify OTP (Check OTP)
+app.post("/verify-otp", (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return res.status(400).json({ error: "Email and OTP are required" });
+    }
+
+    // Check if OTP is valid for this email
+    const storedOTP = otpStore[email];
+
+    if (storedOTP && storedOTP === parseInt(otp)) {
+        // OTP is correct, remove it from store after verification
+        delete otpStore[email];
+        res.json({ message: "OTP verified successfully" });
+    } else {
+        res.status(400).json({ error: "Invalid OTP" });
     }
 });
 
